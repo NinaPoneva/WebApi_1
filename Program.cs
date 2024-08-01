@@ -1,33 +1,28 @@
-﻿using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.OpenApi.Models;
-using NLog;
+﻿using Microsoft.OpenApi.Models;
 using NLog.Web;
-using WebApi_1;
-
+using NLog;
 
 var builder = WebApplication.CreateBuilder(args);
 
 
-builder.WebHost.ConfigureKestrel(options =>
-{
-	options.ListenAnyIP(5000); 
-});
-
-builder.Services.AddControllers();
-
-builder.Services.AddTransient<SwiftMessageParser>();
-
-builder.Services.AddSingleton<DatabaseService>(provider =>
-	new DatabaseService("Data Source=mydatabase.db"));
-
+// Configure NLog
 builder.Host.UseNLog();
 
+// Configure Kestrel to listen on port 5000
+builder.WebHost.ConfigureKestrel(options =>
+{
+	options.ListenAnyIP(5000);
+});
+
+// Register services
 builder.Services.AddControllers();
-builder.Services.AddSingleton(new DatabaseService("Data Source=SwiftMessages.db"));
+builder.Services.AddSingleton<SwiftParser>();
 
+// Register DatabaseService with connection string
+builder.Services.AddSingleton<DatabaseService>(provider =>
+	new DatabaseService("Data Source=SwiftMessages.db"));
 
+// Add Swagger generation
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -36,18 +31,16 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-
+// Configure middleware
 if (app.Environment.IsDevelopment())
 {
-
+	app.UseDeveloperExceptionPage();
 	app.UseSwagger();
 	app.UseSwaggerUI(c =>
 	{
 		c.SwaggerEndpoint("/swagger/v1/swagger.json", "Web API V1");
 		c.RoutePrefix = string.Empty;
 	});
-
-	app.UseDeveloperExceptionPage();
 }
 else
 {
@@ -56,13 +49,9 @@ else
 }
 
 app.UseStaticFiles();
-
 app.UseRouting();
-
-
 app.MapControllers();
-
-
 app.Run();
 
+// Ensure NLog shutdown on application exit
 LogManager.Shutdown();

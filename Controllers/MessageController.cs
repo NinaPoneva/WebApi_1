@@ -1,94 +1,76 @@
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using System.IO;
-using System.Text.RegularExpressions;
-using WebApi_1;
 
-[Route("api/")]
-[ApiController]
-public class MessageController : ControllerBase
+
+namespace WebApi_1.Controllers
 {
-	private readonly DatabaseService _databaseService;
-	private readonly SwiftMessageParser _swiftMessageParser;
-
-	public MessageController(DatabaseService databaseService,SwiftMessageParser swiftMessageParser)
+	[Route("api/")]
+	[ApiController]
+	public class MessageController : ControllerBase
 	{
-		_databaseService = databaseService;
-	}
+		private readonly DatabaseService _databaseService;
+		private readonly SwiftParser _swiftMessageParser;
 
-
-	[HttpPost("upload-body")]
-	public async Task<IActionResult> UploadBody([FromBody] MessageModel message)
-	{
-
-		if (message == null)
+		public MessageController(DatabaseService databaseService, SwiftParser swiftMessageParser)
 		{
-			return BadRequest(new { message = "The message body is required." });
+			_databaseService = databaseService;
+			_swiftMessageParser = swiftMessageParser;
 		}
 
-		Console.WriteLine($"Received message with Block1: {message.Block1}");
-
-		try
+		/// <summary>
+		/// Processes the upload of a SWIFT MT 799 file, parses the content, and writes the parsed message to the database.
+		/// </summary>
+		/// <param name="file">
+		/// The file to be uploaded and processed. Must not be null and must contain data.
+		/// </param>
+		/// <returns>
+		///  An IActionResult that represents the result of the file upload operation:
+		/// - Returns a BadRequest with an error message if no file is uploaded or if parsing fails.
+		/// - Returns a StatusCode 500 with an error message if there's an internal server error during file processing or database operations.
+		/// - Returns an Ok response indicating successful processing and saving of the message if everything succeeds.
+		/// </returns>
+		[HttpPost("upload-file")]
+		public async Task<IActionResult> UploadFile(IFormFile file)
 		{
-			await _databaseService.AddRecordAsync(message);
-			return Ok("Message received and processed successfully.");
-		}
-		catch (Exception ex)
-		{
-			Console.WriteLine($"An error occurred while saving the message: {ex.Message}");
-			return StatusCode(500, "An error occurred while processing the message.");
-		}
-	}
-
-	[HttpPost("read-from-text-file")]
-	public async Task<IActionResult> ReadFromTextFile([FromBody] string filePath)
-	{
-		if (string.IsNullOrWhiteSpace(filePath))
-		{
-			return BadRequest("Invalid file path.");
-		}
-
-		if (!System.IO.File.Exists(filePath))
-		{
-			return NotFound("File not found.");
-		}
-
-		try
-		{
-			var content = await System.IO.File.ReadAllTextAsync(filePath);
-			return Ok(new { content });
-		}
-		catch (IOException ex)
-		{
-			return StatusCode(500, $"Internal server error: {ex.Message}");
-		}
-	}
-
-	[HttpPost("upload-file")]
-	public async Task<IActionResult> UploadFile(IFormFile file)
-	{
-		if (file == null || file.Length == 0)
-		{
-			return BadRequest("No file uploaded.");
-		}
-
-		try
-		{
-			using (var reader = new StreamReader(file.OpenReadStream()))
+			if (file == null || file.Length == 0)
 			{
-				var content = await reader.ReadToEndAsync();
-
-				var parser = new SwiftMessageParser();
-				var message = parser.Parse(content);
-
-				await _databaseService.AddRecordAsync(message);
+				return BadRequest("No file uploaded.");
 			}
 
-			return Ok("Message received and processed successfully.");
-		}
-		catch (IOException ex)
-		{
-			return StatusCode(500, $"Internal server error: {ex.Message}");
+			try
+			{
+				string content;
+				using (var reader = new StreamReader(file.OpenReadStream()))
+				{
+					content = await reader.ReadToEndAsync();
+				}
+
+				var message = _swiftMessageParser.ParseSwiftMessage(content);
+
+				if (message == null)
+				{
+					return BadRequest("Failed to parse the message.");
+				}
+
+				try
+				{
+					await _databaseService.AddRecordAsync(message);
+				}
+				catch (Exception ex)
+				{
+					return StatusCode(500, "Internal server error while saving the record.");
+				}
+
+				return Ok("Message received and processed successfully.");
+			}
+			catch (IOException ex)
+			{
+				
+				return StatusCode(500, $"Internal server error while reading the file: {ex.Message}");
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, $"Internal server error: {ex.Message}");
+			}
 		}
 	}
 }
