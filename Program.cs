@@ -9,13 +9,20 @@ using WebApi_1;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
 builder.WebHost.ConfigureKestrel(options =>
 {
 	options.ListenAnyIP(5000); 
 });
 
+builder.Services.AddControllers();
 
-builder.Host.UseNLog(); 
+builder.Services.AddTransient<SwiftMessageParser>();
+
+builder.Services.AddSingleton<DatabaseService>(provider =>
+	new DatabaseService("Data Source=mydatabase.db"));
+
+builder.Host.UseNLog();
 
 builder.Services.AddControllers();
 builder.Services.AddSingleton(new DatabaseService("Data Source=SwiftMessages.db"));
@@ -32,12 +39,12 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
-	
+
 	app.UseSwagger();
 	app.UseSwaggerUI(c =>
 	{
 		c.SwaggerEndpoint("/swagger/v1/swagger.json", "Web API V1");
-		c.RoutePrefix = string.Empty; 
+		c.RoutePrefix = string.Empty;
 	});
 
 	app.UseDeveloperExceptionPage();

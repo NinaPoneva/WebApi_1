@@ -2,10 +2,17 @@
 
 namespace WebApi_1
 {
+	using System.Text.RegularExpressions;
+
 	public class SwiftMessageParser
 	{
 		public MessageModel Parse(string message)
 		{
+			if (string.IsNullOrWhiteSpace(message))
+			{
+				throw new ArgumentException("Message cannot be null or empty", nameof(message));
+			}
+
 			var swiftMessage = new MessageModel();
 
 			// Regular expressions to extract each block
@@ -31,5 +38,4 @@ namespace WebApi_1
 			return match.Success ? match.Groups[1].Value.Trim() : null;
 		}
 	}
-
 }
